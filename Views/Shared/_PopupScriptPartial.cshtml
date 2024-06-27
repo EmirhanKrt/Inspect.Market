@@ -1,0 +1,61 @@
+﻿<script>
+    /*
+        PopUp oluşturma ve kapama işlemlerinin yapıldığı fonksiyonlar.
+    */
+    const createPopup = (innerHTML) => {
+        const popup = document.createElement("div");
+        popup.id = "popup";
+        popup.innerHTML = innerHTML;
+
+        const overlay = document.createElement("div");
+        overlay.id = "overlay";
+
+        document.body.appendChild(overlay);
+        document.body.appendChild(popup);
+        document.body.style.overflow = 'hidden';
+
+        const closePopup = () => {
+            document.body.removeChild(popup);
+            document.body.removeChild(overlay);
+            document.body.style.overflow = '';
+        };
+
+        overlay.addEventListener("click", closePopup);
+        return popup;
+    };
+
+    const handleFormSubmission = (formId, endpoint, method, successMessage) => {
+        const form = document.getElementById(formId);
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        if (data.CryptocurrenyId) {
+            data.CryptocurrenyId = +data.CryptocurrenyId;
+        }
+
+        if (data.PortfolioId) {
+            data.PortfolioId = +data.PortfolioId;
+        }
+
+        fetch(endpoint, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (response.ok) {
+                alert(successMessage);
+                location.reload();
+            } else {
+                return response.json().then(errorData => {
+                    console.error('Error:', errorData);
+                });
+            }
+        })
+        .catch(error => {
+            alert(error);
+        });
+    };
+</script>

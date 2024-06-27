@@ -1,0 +1,76 @@
+﻿@model Inspect.Market.Areas.Admin.Models.ViewModels.AnalyticsViewModel
+@{
+    ViewData["Title"] = "Administrator - Home";
+    Layout = "~/Views/Shared/_LayoutWithoutNavbar.cshtml";
+}
+
+<h1>Administrator Page - Statistics</h1>
+
+<h2>Cryptocurrencies by Watchlist Count</h2>
+<table class="table cryptocurrency-table" >
+    <thead>
+        <tr>
+            <th style="text-align: left;">Name</th>
+            <th>Watchlist Count</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var crypto in Model.CryptosByWatchlist)
+        {
+            <tr>
+                <td style="text-align: left">
+                    <img src="~/images/@(crypto.Slug).png" alt="@crypto.Name" class="crypto-icon">
+                    <span class="crypto-name">@crypto.Name</span>
+                    <span class="crypto-symbol">@crypto.Symbol</span>
+                </td>
+                <td>@crypto.WatchlistCount</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h2>Cryptocurrencies by Portfolio Count</h2>
+<table class="table cryptocurrency-table">
+    <thead>
+        <tr>
+            <th style="text-align: left;">Name</th>
+            <th>Portfolio Count</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var crypto in Model.CryptosByPortfolio)
+        {
+            <tr>
+                <td style="text-align: left">
+                    <img src="~/images/@(crypto.Slug).png" alt="@crypto.Name" class="crypto-icon">
+                    <span class="crypto-name">@crypto.Name</span>
+                    <span class="crypto-symbol">@crypto.Symbol</span>
+                </td>
+                <td>@crypto.PortfolioCount</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h2>Cryptocurrencies by Trade Count</h2>
+<table class="table cryptocurrency-table">
+    <thead>
+        <tr>
+            <th style="text-align: left;">Name</th>
+            <th>Trade Count</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var crypto in Model.CryptosByTradeCount)
+        {
+            <tr>
+                <td style="text-align: left">
+                    <img src="~/images/@(crypto.Slug).png" alt="@crypto.Name" class="crypto-icon">
+                    <span class="crypto-name">@crypto.Name</span>
+                    <span class="crypto-symbol">@crypto.Symbol</span>
+                </td>
+                <td>@crypto.TradeCount</td>
+            </tr>
+        }
+    </tbody>
+</table>

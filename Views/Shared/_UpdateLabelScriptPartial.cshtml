@@ -1,0 +1,46 @@
+﻿<script src="~/lib/microsoft-signalr/signalr.min.js"></script>
+<script>
+    /* 
+        WebSocket üzerinden gelen verilerin arayüz üzerinde güncellenme işlemini gerçekleştiren fonksiyon
+    */
+    const updateCellValue = (element, newValue, formatType, decimalCount) => {
+        const oldValue = parseFloat(element.textContent.replace(/[^\d.-]/g, ''));
+        let formattedNewValue;
+
+        if (formatType === "change") {
+            element.textContent = newValue.toFixed(2) + "%";
+            return;
+        }
+        else if (formatType === "volume" || formatType === "marketcap") {
+            element.textContent = Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                maximumFractionDigits: 0,
+                minimumFractionDigits: 0,
+            }).format(newValue);
+            return;
+        }
+
+        element.textContent = Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: decimalCount,
+            maximumFractionDigits: decimalCount
+        }).format(newValue);
+
+        if (newValue > oldValue) {
+            animateElement(element, 'increase');
+        } else if (newValue < oldValue) {
+            animateElement(element, 'decrease');
+        }
+    }
+
+    const animateElement = (element, type) => {
+        element.classList.remove('increase', 'decrease');
+        void element.offsetWidth;
+        element.classList.add(type);
+        element.addEventListener('animationend', () => {
+            element.classList.remove(type);
+        }, { once: true });
+    }
+</script>

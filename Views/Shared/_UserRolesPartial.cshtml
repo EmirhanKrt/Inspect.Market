@@ -1,0 +1,14 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using Inspect.Market.Models
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+
+@{
+    var user = UserManager.GetUserAsync(User).Result;
+    var roles = UserManager.GetRolesAsync(user).Result;
+
+    if (roles.Contains("Administrator"))
+    {
+        <a class="nav-link" asp-area="Admin" asp-controller="Home" asp-action="Index">Administrator</a>
+    }
+}

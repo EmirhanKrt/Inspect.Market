@@ -1,0 +1,67 @@
+﻿@using System.Globalization;
+@model Inspect.Market.Models.ViewModels.BaseDetailsViewModel
+
+<div class="portfolio-accordion">
+    @foreach (var portfolio in Model.Portfolio)
+    {
+        var portfolioTotal = portfolio.Holdings.Sum(holding =>
+        {
+            var marketData = Model.MarketData.FirstOrDefault(md => md.Cryptocurrency.Id == holding.CryptocurrencyId);
+            var currentPrice = marketData?.Price ?? 0;
+            return holding.CryptocurrencyAmount * currentPrice;
+        });
+
+        <div class="portfolio-item" data-portfolio-id="@portfolio.Id">
+            <div class="portfolio-header" onclick="togglePortfolio(@portfolio.Id)">
+                <span class="portfolio-header-span">@portfolio.Name</span>
+                <span class="portfolio-total">@portfolioTotal.ToString("C", new CultureInfo("en-US"))</span>
+            </div>
+            <div id="portfolio-content-@portfolio.Id" class="portfolio-content">
+                <table class="table cryptocurrency-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left">Name</th>
+                            <th>Price</th>
+                            <th>Holdings</th>
+                            <th>Avg. Cost</th>
+                            <th>Profit/Loss</th>
+                            <th style="width: 56px">View</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var holding in portfolio.Holdings)
+                        {
+                            var marketData = Model.MarketData.FirstOrDefault(md => md.Cryptocurrency.Id == holding.CryptocurrencyId);
+                            var currentPrice = marketData?.Price ?? 0;
+                            var currentValue = holding.CryptocurrencyAmount * currentPrice;
+                            var profitLoss = currentValue - holding.CryptocurrencyCost;
+
+                            var usCulture = new CultureInfo("en-US");
+                            var numberFormatInfo = (NumberFormatInfo)usCulture.NumberFormat.Clone();
+                            numberFormatInfo.CurrencyDecimalDigits = marketData == null ? 2 : marketData.Cryptocurrency.DecimalCount;
+
+                            <tr class="crypto-row" data-holding-id="@holding.Id">
+                                <td style="text-align: left">
+                                    <img src="~/images/@(marketData?.Cryptocurrency.Slug).png" alt="@marketData?.Cryptocurrency.Name" class="crypto-icon">
+                                    <span class="crypto-name">@marketData?.Cryptocurrency.Name</span>
+                                    <span class="crypto-symbol">@marketData?.Cryptocurrency.Symbol</span>
+                                </td>
+                                <td class="price"><span>@currentPrice.ToString("C", numberFormatInfo)</span></td>
+                                <td class="holding-amount"><span>@holding.CryptocurrencyAmount.ToString("N4", usCulture) @marketData?.Cryptocurrency.Symbol</span></td>
+                                <td class="avg-cost"><span>@holding.CryptocurrencyCost.ToString("C", numberFormatInfo)</span></td>
+                                <td class="profit-loss"><span>@profitLoss.ToString("C", numberFormatInfo)</span></td>
+                                <td onclick="viewTransaction(@portfolio.Id,@holding.Id,@marketData?.Cryptocurrency.Id)"><i class="fa-solid fa-eye"></i></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <button class="primary" onclick="addTransaction(@portfolio.Id)">Add Transaction</button>
+                <div class="d-flex" style="gap: 1rem;">
+                    <button style="width: 50%" onclick="updatePortfolio(@portfolio.Id,'@portfolio.Name')">Update Portfolio</button>
+                    <button style="width: 50%; background-color: var(--error-background-color)" onclick="deletePortfolio(@portfolio.Id)">Delete Portfolio</button>
+                </div>
+            </div>
+        </div>
+    }
+    <button class="primary" onclick="createNewPortfolio()">Create new portfolio</button>
+</div>

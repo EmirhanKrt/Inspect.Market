@@ -1,0 +1,185 @@
+﻿@using System.Globalization;
+@model Inspect.Market.Models.ViewModels.HomeViewModel
+
+@{
+    ViewData["Title"] = "Home";
+
+    Dictionary<string, MarketData> marketDataDict = Model.MarketData.ToDictionary(md => md.Cryptocurrency.Symbol, md => md);
+    
+    var watchlistCryptocurrencyIds = Model.Watchlist.ToDictionary(w => w.CryptocurrencyId, w => w.Id);
+    var userNotLoggedIn = User.Identity.IsAuthenticated ? "" : "not-authenticated";
+}
+
+<script>
+    /*
+        JavaScript içerisine Model'den gelen verileri gömerek 
+        WebSocket üzerinden gelen gerçek zamanlı güncellemeleri
+        arayüz üzerinde çizdirmek için kullanılıyor.
+    */
+    var marketDataDict = JSON.parse('@Html.Raw(System.Text.Json.JsonSerializer.Serialize(marketDataDict))');
+    var portfolio = JSON.parse('@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Portfolio))');
+</script>
+
+<h2>Binance USDT Pair Market Statics</h2>
+
+@{
+    if (User.Identity.IsAuthenticated)
+    {
+        <script>const isUserLoggedIn = true;</script>
+        @Html.Partial("_PortfolioPartial", Model)
+    }
+    else
+    {
+        <script>const isUserLoggedIn = false;</script>
+    }
+}
+
+<table class="table cryptocurrency-table" style="margin-top: 1rem;">
+    <thead>
+        <tr>
+            <th style="width: 36px;"></th>
+            <th style="text-align: left">Name</th>
+            <th>Price</th>
+            <th>Change (24h)</th>
+            <th>Market Cap</th>
+            <th>Volume (24h)</th>
+        </tr>
+    </thead>
+    <tbody id="marketDataTable">
+        @foreach (var crypto in Model.MarketData)
+        {
+            var usCulture = new CultureInfo("en-US");
+            var numberFormatInfo = (NumberFormatInfo)usCulture.NumberFormat.Clone();
+            numberFormatInfo.CurrencyDecimalDigits = crypto.Cryptocurrency.DecimalCount;
+
+            var isInWatchlist = watchlistCryptocurrencyIds.ContainsKey(crypto.Cryptocurrency.Id);
+            var starClass = isInWatchlist ? "fa-solid fa-star" : "fa-regular fa-star";
+            var watchlistId = isInWatchlist ? watchlistCryptocurrencyIds[crypto.Cryptocurrency.Id] : 0;
+
+            <tr class="crypto-row" data-symbol="@crypto.Cryptocurrency.Symbol" data-slug="@crypto.Cryptocurrency.Slug" data-cryptocurrency-id="@crypto.Cryptocurrency.Id" data-watchlist-id="@watchlistId" data-decimal-count="@crypto.Cryptocurrency.DecimalCount">
+                <td><i class="@starClass @userNotLoggedIn"></i></td>
+                <td style="text-align: left">
+                    <img src="~/images/@(crypto.Cryptocurrency.Slug).png" alt="@crypto.Cryptocurrency.Name" class="crypto-icon">
+                    <span class="crypto-name">@crypto.Cryptocurrency.Name</span>
+                    <span class="crypto-symbol">@crypto.Cryptocurrency.Symbol</span>
+                </td>
+                <td class="price"><span>@crypto.Price.ToString("C", numberFormatInfo)</span></td>
+                @{
+                    numberFormatInfo.CurrencyDecimalDigits = 0;
+                }
+                <td class="change24h"><span class="@(crypto.Change24h > 0 ? "increased" : crypto.Change24h < 0 ? "decreased" : "")">@crypto.Change24h.ToString("0.00", usCulture)%</span></td>
+                <td class="market-cap"><span>@crypto.MarketCap.ToString("C", numberFormatInfo)</span></td>
+                <td class="volume24h"><span>@(crypto.Volume24h != 0 ? crypto.Volume24h.ToString("C", numberFormatInfo) : "-")</span></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@await Html.PartialAsync("_PortfolioHandlerScriptPartial")
+@await Html.PartialAsync("_UpdateLabelScriptPartial")
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('.fa-star').click(function () {
+                event.stopPropagation();
+
+                if (!isUserLoggedIn) return;
+
+                var $this = $(this);
+                var cryptocurrencyId = $this.closest('tr').data('cryptocurrency-id');
+
+                if ($this.hasClass('fa-regular')) {
+                    $.ajax({
+                        url: '/api/watchlist',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ cryptocurrencyId }),
+                        success: function (response) {
+                            $this.removeClass('fa-regular').addClass('fa-solid');
+                            $this.closest('tr').data('watchlist-id', response.id);
+
+                            console.log(response);
+                        },
+                        error: function (xhr, status, error) {
+                            alert('Error adding to watchlist: ' + error);
+                        }
+                    });
+                } else if ($this.hasClass('fa-solid')) {
+                    var watchlistId = $this.closest('tr').data('watchlist-id');
+
+                    $.ajax({
+                        url: '/api/watchlist/' + watchlistId,
+                        type: 'DELETE',
+                        success: function (response) {
+                            $this.removeClass('fa-solid').addClass('fa-regular');
+                            $this.closest('tr').data('watchlist-id', 0);
+                        },
+                        error: function (xhr, status, error) {
+                            alert('Error removing from watchlist: ' + error);
+                        }
+                    });
+                }
+            });
+
+            $(document).click(function (event) {
+                if (!$(event.target).closest('.fa-star').length) {
+                    var slug = $(event.target).closest('.crypto-row').data('slug');
+                    if (slug) {
+                        window.location.href = "/cryptocurrency/" + slug;
+                    }
+                }
+            });
+        });
+    </script>
+    <script type="text/javascript">
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/marketDataHub")
+            .build();
+
+        connection.on("ReceiveMarketData", (data) => {
+            data.forEach((iData) => {
+                marketDataDict[iData.symbol] = {
+                    ...marketDataDict[iData.symbol],
+                    Price: iData.price,
+                    Change24h: iData.change24h,
+                    DailyLowPrice: iData.dailyLowPrice,
+                    DailyHighPrice: iData.dailyHighPrice,
+                    MarketCap: iData.marketCap,
+                    Volume24h: iData.volume24h
+                }
+
+                updateCryptocurrencyRow(iData.symbol);
+            })
+
+            updatePortfolioComponent();
+        });
+
+        connection.start().catch(err => console.error(err));
+
+        const updateCryptocurrencyRow = (symbol) => {
+            const cryptocurrencyData = marketDataDict[symbol];
+
+            const row = document.querySelector(`tr[data-symbol='${symbol}']`);
+            if (row) {
+                const change24hSpan = row.querySelector('.change24h span');
+                const change24hValue = parseFloat(change24hSpan.textContent);
+                if (cryptocurrencyData.change24h > 0) {
+                    change24hSpan.classList.remove('decreased');
+                    change24hSpan.classList.add('increased');
+                } else if (cryptocurrencyData.change24h < 0) {
+                    change24hSpan.classList.remove('increased');
+                    change24hSpan.classList.add('decreased');
+                }
+
+                updateCellValue(row.querySelector('.price span'), cryptocurrencyData.Price, "currency", row.dataset.decimalCount);
+
+                updateCellValue(row.querySelector('.change24h span'), cryptocurrencyData.Change24h, "change", 2);
+
+                updateCellValue(row.querySelector('.market-cap span'), cryptocurrencyData.MarketCap, "marketcap", 0);
+
+                updateCellValue(row.querySelector('.volume24h span'), cryptocurrencyData.Volume24h, "volume", 0);
+            }
+        }
+    </script>
+}

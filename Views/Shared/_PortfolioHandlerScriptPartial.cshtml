@@ -1,0 +1,235 @@
+﻿@await Html.PartialAsync("_PopupScriptPartial")
+@await Html.PartialAsync("_PortfolioStylePartial")
+
+<script>
+    /*
+        Portfolio ve Transaction Request işlemlerinin yapıldığı fonksiyonlar.
+    */
+    const togglePortfolio = (portfolioId) => {
+        var content = document.getElementById('portfolio-content-' + portfolioId);
+        if (content.style.display === "none" || content.style.display === "") {
+            content.style.display = "flex";
+        } else {
+            content.style.display = "none";
+        }
+    }
+
+    const addTransaction = (portfolioId) => {
+        const options = Object.values(marketDataDict).map(marketData => 
+            `<option value="${marketData.Cryptocurrency.Id}">${marketData.Cryptocurrency.Name}</option>`
+        ).join("");
+
+        const popupContentInnerHTML = `
+            <h3>Add Transaction</h3>
+            <form id="transactionForm">
+                <input type="hidden" id="PortfolioId" name="PortfolioId" value="${portfolioId}"/>
+                <div>
+                    <label for="CryptocurrencyId">Cryptocurrency:</label>
+                    <select id="CryptocurrencyId" name="CryptocurrencyId">
+                        ${options}
+                    </select>
+                </div>
+                <div>
+                    <label for="TransactionPrice">Price:</label>
+                    <input type="number" id="TransactionPrice" name="TransactionPrice">
+                </div>
+                <div>
+                    <label for="TransactionAmount">Amount:</label>
+                    <input type="number" id="TransactionAmount" name="TransactionAmount">
+                </div>
+                <div>
+                    <label for="TransactionType">Type:</label>
+                    <select id="TransactionType" name="TransactionType">
+                        <option value="Buy">Buy</option>
+                        <option value="Sell">Sell</option>
+                    </select>
+                </div>
+                <button type="button" id="addTransaction">Add Transaction</button>
+            </form>`;
+
+        const popup = createPopup(popupContentInnerHTML);
+
+        document.getElementById("addTransaction").addEventListener("click", () => {
+            handleFormSubmission("transactionForm", '/api/transaction', 'POST', 'Added transaction successfully.');
+        });
+    };
+
+    const viewTransaction = (portfolioId, holdingId, cryptocurrencyId) => {
+        const popup = createPopup("");
+
+        fetch(`/api/transaction/holding/${holdingId}`)
+            .then(response => response.json())
+            .then(data => {
+                const tableBodyContent = data.map(transaction => `
+                    <tr>
+                        <td contenteditable="true">${transaction.transactionType}</td>
+                        <td contenteditable="true" class="editable">${transaction.transactionAmount}</td>
+                        <td contenteditable="true" class="editable">${transaction.transactionPrice}</td>
+                        <td><button class="update" data-id="${transaction.id}">Update</button></td>
+                        <td><button class="delete" data-id="${transaction.id}">Delete</button></td>
+                    </tr>
+                `).join('');
+
+                const tableContent = `
+                    <h3>View Transactions</h3>
+                    <table class="table cryptocurrency-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Price</th>
+                                <th>Update</th>
+                                <th>Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableBodyContent}
+                        </tbody>
+                    </table>
+                    <button id="closePopup">Close</button>
+                `;
+                popup.innerHTML = tableContent;
+
+                document.querySelectorAll('.update').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const row = button.closest('tr');
+                        const data = {
+                            TransactionType: row.querySelector('td:nth-child(1)').innerText,
+                            TransactionAmount: row.querySelector('td:nth-child(2)').innerText,
+                            TransactionPrice: row.querySelector('td:nth-child(3)').innerText,
+                            PortfolioId: portfolioId,
+                            CryptocurrencyId: cryptocurrencyId
+                        };
+
+                        console.log(data);
+
+                        const id = button.getAttribute('data-id');
+
+                        fetch(`/api/transaction/${id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        })
+                            .then(response => {
+                                if (response.ok) {
+                                    alert("Transaction updated successfully");
+                                    location.reload();
+                                } else {
+                                    return response.json().then(errorData => {
+                                        console.error('Error:', errorData);
+                                    });
+                                }
+                            })
+                            .catch(error => {
+                                alert(error);
+                            });
+                    });
+                });
+
+                document.querySelectorAll('.delete').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const id = button.getAttribute('data-id');
+                        fetch(`/api/transaction/${id}`, { method: 'DELETE' })
+                            .then(response => {
+                                if (response.ok) {
+                                    alert('Transaction deleted successfully.');
+                                    location.reload();
+                                } else {
+                                    alert('Failed to delete transaction.');
+                                }
+                            });
+                    });
+                });
+
+                document.getElementById('closePopup').addEventListener('click', () => {
+                    document.body.removeChild(popup);
+                    document.body.removeChild(overlay);
+                    document.body.style.overflow = '';
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching transactions:', error);
+            });
+    };
+
+    const createNewPortfolio = () => {
+        const popupContentInnerHTML = `
+            <h3>Create Portfolio</h3>
+            <form id="portfolioForm">
+                <div>
+                    <label for="Name">Portfolio Name:</label>
+                    <input type="text" id="Name" name="Name">
+                </div>
+                <button type="button" id="createPortfolio">Create Portfolio</button>
+            </form>`;
+
+        const popup = createPopup(popupContentInnerHTML);
+
+        document.getElementById("createPortfolio").addEventListener("click", () => {
+            handleFormSubmission("portfolioForm", '/api/portfolio', 'POST', 'Created portfolio successfully.');
+        });
+    };
+
+    const updatePortfolio = (portfolioId, initialPortfolioName) => {
+        const popupContentInnerHTML = `
+            <h3>Update Portfolio</h3>
+            <form id="updatePortfolioForm">
+                <div>
+                    <label for="Name">Portfolio Name:</label>
+                    <input type="text" id="Name" name="Name" value="${initialPortfolioName}">
+                </div>
+                <button type="button" id="updatePortfolio">Update Portfolio</button>
+            </form>`;
+
+        const popup = createPopup(popupContentInnerHTML);
+
+        document.getElementById("updatePortfolio").addEventListener("click", () => {
+            handleFormSubmission("updatePortfolioForm", `/api/portfolio/${portfolioId}`, 'PUT', 'Updated portfolio successfully.');
+        });
+    };
+
+    const deletePortfolio = (portfolioId) => {
+        const popupContentInnerHTML = `<h3>Delete Portfolio</h3><button type="button" id="deletePortfolio">Delete Portfolio</button>`;
+        const popup = createPopup(popupContentInnerHTML);
+
+        document.getElementById("deletePortfolio").addEventListener("click", () => {
+            fetch(`/api/portfolio/${portfolioId}`, { method: 'DELETE' })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Deleted portfolio successfully.');
+                        location.reload();
+                    } else {
+                        return response.json().then(errorData => {
+                            console.error('Error:', errorData);
+                        });
+                    }
+                })
+                .catch(error => {
+                    alert(error);
+                });
+        });
+    };
+
+    const updatePortfolioComponent = () => {
+        portfolio.forEach((iPortfolio) => {
+            const portfolioContainer = document.querySelector(`div.portfolio-item[data-portfolio-id="${iPortfolio.Id}"]`);
+            let value = 0;
+
+            iPortfolio.Holdings.forEach((holding) => {
+                const marketData = Object.values(marketDataDict).filter((marketData) => marketData.Cryptocurrency.Id === holding.CryptocurrencyId)[0];
+                const holdingValue = marketData.Price * holding.CryptocurrencyAmount;
+                const profitLoss = holdingValue - holding.CryptocurrencyCost * holding.CryptocurrencyAmount;
+
+                updateCellValue(portfolioContainer.querySelector(`table > tbody > tr[data-holding-id="${holding.Id}"] > td.price > span`), marketData.Price, "currency", marketData.Cryptocurrency.DecimalCount);
+
+                updateCellValue(portfolioContainer.querySelector(`table > tbody > tr[data-holding-id="${holding.Id}"] > td.profit-loss > span`), profitLoss, "currency", 2);
+
+                value += holdingValue;
+            })
+
+            updateCellValue(portfolioContainer.querySelector(".portfolio-total"), value, "currency", 2);
+        })
+    }
+</script>

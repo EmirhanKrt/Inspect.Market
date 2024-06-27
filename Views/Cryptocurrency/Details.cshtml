@@ -1,0 +1,332 @@
+﻿@using System.Globalization
+@model Inspect.Market.Models.ViewModels.CryptocurrencyDetailsViewModel
+
+@if (Model == null)
+{
+    <h1>Cryptocurrency Not Found</h1>
+    <p>The cryptocurrency you are looking for does not exist. Please check the URL and try again.</p>
+    <a href="/">Go Back</a>
+}
+
+@if (Model != null)
+{
+    var marketData = Model.ActiveMarketData;
+    var cryptocurrency = marketData.Cryptocurrency;
+    ViewData["Title"] = cryptocurrency.Name + " (" + cryptocurrency.Symbol + ")";
+
+    Dictionary<string, MarketData> marketDataDict = Model.MarketData.ToDictionary(md => md.Cryptocurrency.Symbol, md => md);
+
+    var usCulture = new CultureInfo("en-US");
+    var numberFormatInfo = (NumberFormatInfo)usCulture.NumberFormat.Clone();
+    numberFormatInfo.CurrencyDecimalDigits = cryptocurrency.DecimalCount;
+
+    <script>
+        /*
+            JavaScript içerisine Model'den gelen verileri gömerek
+            WebSocket üzerinden gelen gerçek zamanlı güncellemeleri
+            arayüz üzerinde çizdirmek için kullanılıyor.
+        */
+        var marketDataDict = JSON.parse('@Html.Raw(System.Text.Json.JsonSerializer.Serialize(marketDataDict))');
+        var portfolio = JSON.parse('@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Portfolio))');
+    </script>
+
+    <div class="crypto-detail" style="margin-bottom: 1rem;">
+        <div class="crypto-detail-left">
+            <div class="crypto-header">
+                <img src="~/images/@(cryptocurrency.Slug).png" alt="@cryptocurrency.Name" class="crypto-icon">
+                <div style="flex: 1">
+                    <h2 class="m-0">@cryptocurrency.Name</h2>
+                    <p class="m-0">@cryptocurrency.Symbol</p>
+                </div>
+                <div>
+                    @if (Model.Watchlist != null)
+                    {
+                        <i class="fa-solid fa-star" style="font-size: 24px;" data-watchlist-id="@Model.Watchlist.Id"></i>
+                    }
+                    else
+                    {
+                        <i class="fa-regular fa-star" style="font-size: 24px;" data-watchlist-id="0"></i>
+                    }
+                </div>
+            </div>
+
+            <div class="d-flex gap-1 align-items-center">
+                <h3 id="price-label" style="margin: 0">@marketData.Price.ToString("C", numberFormatInfo)</h3>
+                <h4 id="change-label" style="margin: 0" class="@(marketData.Change24h > 0 ? "increased" : marketData.Change24h < 0 ? "decreased" : "")">
+                    <span style="font-size: inherit; font-family: inherit">@marketData.Change24h.ToString("0.00", usCulture)</span>
+                </h4>
+            </div>
+
+            <div>
+                @{
+                    var sliderWidth = "0%";
+                    if (cryptocurrency.Symbol != "USDT")
+                    {
+                        if (marketData.Price >= marketData.DailyHighPrice)
+                            sliderWidth = "100%";
+
+                        sliderWidth = $"{(((marketData.Price - marketData.DailyLowPrice) / (marketData.DailyHighPrice - marketData.DailyLowPrice)) * 100).ToString("N2", usCulture)}%";
+                    }
+                    else
+                    {
+                        sliderWidth = "100%";
+                    }
+                }
+                <div class="range-slider">
+                    <div class="slider-track" id="slider-track" style="width: @sliderWidth.ToString()"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <span id="daily-low-price-label" style="color: var(--title-color)">@marketData.DailyLowPrice.ToString("C", numberFormatInfo)</span>
+                    <span style="color: var(--title-color)">24H Price Range</span>
+                    <span id="daily-high-price-label" style="color: var(--title-color)">@marketData.DailyHighPrice.ToString("C", numberFormatInfo)</span>
+                </div>
+            </div>
+
+            <table class="crypto-details-table">
+                <tbody>
+                    @{
+                        numberFormatInfo.CurrencyDecimalDigits = 0;
+                    }
+                    <tr>
+                        <th>Market Cap</th>
+                        <td id="marketcap-label">@marketData.MarketCap.ToString("C", numberFormatInfo)</td>
+                    </tr>
+                    <tr>
+                        <th>Fully Diluted Valuation</th>
+                        <td id="fdv-marketcap-label">@((marketData.Price * cryptocurrency.TotalSupply).ToString("C", numberFormatInfo))</td>
+                    </tr>
+                    <tr>
+                        <th>24 Hour Trading Vol</th>
+                        <td id="volume24h-label">@(marketData.Volume24h != 0 ? marketData.Volume24h.ToString("C", numberFormatInfo) : "-")</td>
+                    </tr>
+                    <tr>
+                        <th>Circulating Supply</th>
+                        <td>@cryptocurrency.CirculationSupply.ToString("N0", usCulture) @cryptocurrency.Symbol</td>
+                    </tr>
+                    <tr>
+                        <th>Total Supply</th>
+                        <td>@cryptocurrency.TotalSupply.ToString("N0", usCulture) @cryptocurrency.Symbol</td>
+                    </tr>
+                    <tr>
+                        <th>Max Supply</th>
+                        <td>@(cryptocurrency.MaxSupply.HasValue ? cryptocurrency.MaxSupply == -1 ? "∞" : cryptocurrency.MaxSupply.Value.ToString("N0", usCulture) : "--") @cryptocurrency.Symbol</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="crypto-detail-right">
+            <div class="interval-button-group d-flex gap-2">
+                <button id="1Hour">1Hour</button>
+                <button id="1Day" class="primary">1Day</button>
+                <button id="1Week">1Week</button>
+            </div>
+            <div id="crypto-graph" style="height: 100%">
+            </div>
+        </div>
+    </div>
+
+    <h4 style="margin-bottom: 1rem">Portfolios including @cryptocurrency.Name - (@cryptocurrency.Symbol)</h4>
+    @Html.Partial("_PortfolioPartial", Model)
+    
+    @await Html.PartialAsync("_PortfolioHandlerScriptPartial")
+    @await Html.PartialAsync("_UpdateLabelScriptPartial")
+
+    @section Scripts {
+        <script src="~/lib/lightweight-charts/lightweight-charts.standalone.production.min.js"></script>
+        <script>
+            $(document).ready(function () {
+                $('.fa-star').click(function () {
+                    var $this = $(this);
+
+                    if ($this.hasClass('fa-regular')) {
+                        $.ajax({
+                            url: '/api/watchlist',
+                            type: 'POST',
+                            contentType: 'application/json',
+                            data: JSON.stringify({ cryptocurrencyId: marketDataDict["@cryptocurrency.Symbol"].Cryptocurrency.Id }),
+                            success: function (response) {
+                                $this.removeClass('fa-regular').addClass('fa-solid');
+                                $this.data('watchlist-id', response.id);
+                            },
+                            error: function (xhr, status, error) {
+                                alert('Error adding to watchlist: ' + error);
+                            }
+                        });
+                    } else if ($this.hasClass('fa-solid')) {
+                        var watchlistId = $this.data('watchlist-id');
+
+                        $.ajax({
+                            url: '/api/watchlist/' + watchlistId,
+                            type: 'DELETE',
+                            success: function (response) {
+                                $this.removeClass('fa-solid').addClass('fa-regular');
+                                $this.data('watchlist-id', 0);
+                            },
+                            error: function (xhr, status, error) {
+                                alert('Error removing from watchlist: ' + error);
+                            }
+                        });
+                    }
+                });
+            });
+        </script>
+        <script>
+            let chart;
+            let chartContainer = document.getElementById('crypto-graph');
+            let candleSeries;
+            let chartData;
+            let interval = '1d';
+
+            const fetchInitialChartData = async () => {
+                try {
+                    const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${marketDataDict["@cryptocurrency.Symbol"].Cryptocurrency.Symbol}USDT&interval=${interval}&limit=1000`);
+                    const data = await response.json();
+                    return data.map(item => ({
+                        time: item[0] / 1000,
+                        open: parseFloat(item[1]),
+                        high: parseFloat(item[2]),
+                        low: parseFloat(item[3]),
+                        close: parseFloat(item[4])
+                    }));
+                } catch (error) {
+                    console.error('Error fetching data from Binance:', error);
+                    return [];
+                }
+            }
+
+            const createChart = (data) => {
+                chart = LightweightCharts.createChart(chartContainer, {
+                    layout: {
+                        textColor: 'white',
+                        background: { type: 'solid', color: '#1f1f1f' }
+                    },
+                    grid: {
+                        vertLines: {
+                            color: '#424242',
+                        },
+                        horzLines: {
+                            color: '#424242',
+                        },
+                    },
+                });
+
+                candleSeries = chart.addCandlestickSeries();
+                candleSeries.setData(data);
+            }
+
+            const initializeChart = async () => {
+                chartData = await fetchInitialChartData();
+                createChart(chartData);
+            }
+
+            document.getElementById('1Hour').addEventListener('click', async () => {
+                interval = '1h';
+                setActiveButton('1Hour');
+
+                chartData = await fetchInitialChartData();
+                candleSeries.setData(chartData);
+            });
+
+            document.getElementById('1Day').addEventListener('click', async () => {
+                interval = '1d';
+                setActiveButton('1Day');
+
+                chartData = await fetchInitialChartData();
+                candleSeries.setData(chartData);
+            });
+
+            document.getElementById('1Week').addEventListener('click',  async () => {
+                interval = '1w';
+                setActiveButton('1Week');
+
+                chartData = await fetchInitialChartData();
+                candleSeries.setData(chartData);
+            });
+
+            const setActiveButton = (buttonId) => {
+                document.querySelectorAll('.crypto-detail-right > .interval-button-group button').forEach(button => {
+                    button.classList.remove('primary');
+                });
+                document.getElementById(buttonId).classList.add('primary');
+            }
+
+            window.addEventListener('resize', () => {
+                if (chart) {
+                    let newWidth = document.querySelector(".crypto-detail").offsetWidth;
+
+                    if(newWidth < 697) {
+                        chart.applyOptions({ 
+                            width: newWidth, 
+                        });
+                    }
+                }
+            });
+
+            initializeChart();
+        </script>
+        <script>
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/marketDataHub?symbol=@cryptocurrency.Symbol")
+                .build();
+
+            connection.on("ReceiveMarketData", (data) => {
+                marketDataDict["@cryptocurrency.Symbol"] = {
+                    ...marketDataDict["@cryptocurrency.Symbol"],
+                    Price: data.price,
+                    Change24h: data.change24h,
+                    DailyLowPrice: data.dailyLowPrice,
+                    DailyHighPrice: data.dailyHighPrice,
+                    MarketCap: data.marketCap,
+                    Volume24h: data.volume24h
+                }
+
+                updateCryptocurrencyData();
+                updatePortfolioComponent();
+                updateChartData();
+            });
+
+            connection.start().catch(err => console.error(err));
+
+            const updateCryptocurrencyData = () => {
+                try{
+                const marketData = marketDataDict["@cryptocurrency.Symbol"];
+
+                const change24hSpan = document.querySelector("#change-label span");
+                const change24hValue = parseFloat(change24hSpan.textContent);
+
+                if (marketData.change24h > 0) {
+                    change24hSpan.classList.remove('decreased');
+                    change24hSpan.classList.add('increased');
+                } else if (marketData.change24h < 0) {
+                    change24hSpan.classList.remove('increased');
+                    change24hSpan.classList.add('decreased');
+                }
+
+                updateCellValue(document.getElementById("price-label"), marketData.Price, "currency", @cryptocurrency.DecimalCount);
+                updateCellValue(document.getElementById("daily-low-price-label"), marketData.DailyLowPrice, "currency", @cryptocurrency.DecimalCount);
+                updateCellValue(document.getElementById("daily-high-price-label"), marketData.DailyHighPrice, "currency", @cryptocurrency.DecimalCount);
+
+                document.getElementById("slider-track").style.width = ((marketData.Price - marketData.DailyLowPrice) / (marketData.DailyHighPrice - marketData.DailyLowPrice) * 100).toFixed("2") + "%";
+
+                updateCellValue(change24hSpan, marketData.Change24h, "change", 2);
+
+                updateCellValue(document.getElementById("marketcap-label"), marketData.MarketCap, "marketcap", 0);
+
+                updateCellValue(document.getElementById("fdv-marketcap-label"), marketData.Price * marketData.Cryptocurrency.TotalSupply, "marketcap", 0);
+
+                updateCellValue(document.getElementById("volume24h-label"), marketData.Volume24h, "volume", 0);
+                }catch(err){console.log(err);}
+            }
+
+            const updateChartData = () => {
+                if(chart){
+                    chartData[chartData.length - 1].close = marketData.Price;
+                    candleSeries.setData(chartData);
+                }
+            }
+        </script>
+    }
+}
+
+
